@@ -1517,6 +1517,27 @@ function sendTabState() {
   } catch {}
 }
 
+// Replace a blank/errored Ops Center pane with a retry page.
+function showOpsError(detail, code) {
+  if (!opsView) return
+  const home = JSON.stringify(portalUrl()).replace(/</g, '\\u003c')
+  const desc = escHtml(String(detail).slice(0, 160))
+  const page = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<style>body{background:#0f1621;color:#9fb2c4;font:14px/1.5 system-ui,sans-serif;height:100vh;margin:0;
+display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}
+h1{color:#d6e4f0;font-size:1.2rem;margin:0 0 6px}p{margin:4px 0;max-width:420px}
+button{margin-top:16px;padding:9px 20px;border:0;border-radius:6px;background:#22d3ee;color:#08131c;font:inherit;font-weight:650;cursor:pointer}
+.d{font-size:12px;opacity:.5}</style></head><body>
+<h1>Ops Center didn't load</h1>
+<p>The Operations Center couldn't be reached just now.</p>
+<p class="d">${desc} (${Number(code)})</p>
+<button onclick="location.href=${home}">Retry</button>
+<script>setTimeout(()=>{location.href=${home}},6000)</script>
+</body></html>`
+  try { opsView.webContents.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(page)) } catch {}
+}
+
 function ensureOpsView() {
   if (opsView) return
   opsView = new WebContentsView({
@@ -1531,20 +1552,33 @@ function ensureOpsView() {
   // Keep the OAuth round-trip inside the window; send everything else to the
   // browser. "back to chat" (a link to the server root) switches to the Chat tab.
   opsView.webContents.on('will-navigate', (e, url) => {
-    try {
-      const u = new URL(url)
-      if (origin && u.origin !== origin) { e.preventDefault(); shell.openExternal(url); return }
-      if (u.pathname === '/' || u.pathname === '') { e.preventDefault(); setActiveTab('chat') }
-    } catch { e.preventDefault() }
+    let u
+    try { u = new URL(url) } catch { return } // unparseable — let Chromium handle it
+    if (origin && u.origin !== origin) { e.preventDefault(); shell.openExternal(url); return }
+    // The portal's "back to chat" link points at the bare server root. Only treat
+    // a plain "/" with no query as that — OAuth bounces through query-bearing URLs.
+    if ((u.pathname === '/' || u.pathname === '') && !u.search) { e.preventDefault(); setActiveTab('chat') }
   })
   opsView.webContents.setWindowOpenHandler(({ url }) => {
     try { shell.openExternal(url) } catch {}
     return { action: 'deny' }
   })
   opsView.webContents.on('page-title-updated', e => e.preventDefault())
-  opsView.webContents.on('did-navigate', () => sendTabState())
   opsView.webContents.on('did-navigate-in-page', () => sendTabState())
   opsView.webContents.on('did-finish-load', () => sendTabState())
+  // Neither a transport failure nor an HTTP 5xx (Caddy returns a near-blank 502
+  // body while the portal container is restarting) must leave a blank pane —
+  // swap in a retry page that reloads the Ops Center.
+  opsView.webContents.on('did-navigate', (_e, url, httpResponseCode) => {
+    sendTabState()
+    if (httpResponseCode >= 500 && url && !url.startsWith('data:')) showOpsError(`Server responded ${httpResponseCode}`, httpResponseCode)
+  })
+  opsView.webContents.on('did-fail-load', (_e, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return
+    if (errorCode === -3) return // ERR_ABORTED — navigation superseded, not a failure
+    if (validatedURL && validatedURL.startsWith('data:')) return
+    showOpsError(String(errorDescription || 'Load failed'), errorCode)
+  })
   opsView.setVisible(false)
   mainWindow.contentView.addChildView(opsView)
   // keep the tab bar on top
