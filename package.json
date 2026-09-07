@@ -25,6 +25,7 @@
       "preload.js",
       "config-preload.js",
       "killfeed-preload.js",
+      "tabbar-preload.js",
       "killtracker.js",
       "default-server.json",
       "assets/**",

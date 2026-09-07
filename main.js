@@ -1,6 +1,7 @@
 const {
   app,
   BrowserWindow,
+  WebContentsView,
   Tray,
   Menu,
   nativeImage,
@@ -382,7 +383,7 @@ async function checkForUpdates(context = 'background') {
       _latestRelease = rel
       send('available', { version: rel.version, downloadUrl: rel.url })
       rebuildTrayMenu()
-      injectTitlebarMark()
+      sendTabState()
       if (!_updateNotified && Notification.isSupported()) {
         _updateNotified = true
         const n = new Notification({
@@ -780,7 +781,14 @@ function registerIpcHandlers() {
   }))
 
   // Window controls
-  ipcMain.on('open-portal', () => { try { showPortalWindow() } catch (e) { console.warn('open-portal:', e.message) } })
+  ipcMain.on('tab-switch', (_e, name) => {
+    try {
+      if (!isWindowReady()) { createWindow(); return }
+      mainWindow.show(); mainWindow.focus()
+      setActiveTab(name)
+    } catch (e) { console.warn('tab-switch:', e.message) }
+  })
+  ipcMain.on('open-update', () => { try { if (_latestRelease?.url) shell.openExternal(_latestRelease.url) } catch {} })
   ipcMain.on('window-minimize', () => { try { if (isWindowReady()) mainWindow.minimize() } catch {} })
   ipcMain.on('window-maximize', () => {
     try {
@@ -1446,35 +1454,53 @@ refresh()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Portal window — the Forum / Events / Servers web app, served at <server>/portal.
-// Runs in the default session so the Fluxer login cookie carries over and the
-// Portal's OAuth sign-in completes silently.
+// Tab bar + Ops Center view
+//
+// The window holds three surfaces:
+//   • mainWindow.webContents  — Fluxer (the "Chat" tab), unchanged
+//   • tabBarView              — a 44px strip across the top: Chat | Ops Center,
+//                               window title/version, and the min/max/close
+//                               buttons (it covers Fluxer's own title bar)
+//   • opsView                 — <server>/portal (the "Ops Center" tab), lazy,
+//                               shown on top of Fluxer when that tab is active
+// Both content surfaces stay alive; switching tabs just toggles opsView.
 // ─────────────────────────────────────────────────────────────────────────────
-let portalWindow = null
+const TAB_BAR_H = 44
+let tabBarView = null
+let opsView = null
+let activeTab = 'chat' // 'chat' | 'ops'
+
 function portalUrl() {
   const base = (appUrl || APP_URL).replace(/\/$/, '')
   return `${base}/portal`
 }
-function showPortalWindow() {
-  if (portalWindow && !portalWindow.isDestroyed()) {
-    portalWindow.show(); portalWindow.focus(); return
-  }
-  let bounds = { width: 1120, height: 800 }
-  try {
-    const cfg = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'config.json'), 'utf8'))
-    if (cfg.portalBounds && typeof cfg.portalBounds.width === 'number') bounds = cfg.portalBounds
-  } catch {}
+function opsOrigin() {
+  try { return new URL(portalUrl()).origin } catch { return null }
+}
 
-  portalWindow = new BrowserWindow({
-    ...bounds,
-    minWidth: 720,
-    minHeight: 560,
-    title: `${APP_NAME} — Portal`,
-    icon: nativeImage.createFromPath(ICON_PATH),
-    backgroundColor: '#0a121c',
-    autoHideMenuBar: true,
-    frame: process.platform !== 'darwin',
-    titleBarStyle: 'hidden',
+function layoutTabViews() {
+  if (!isWindowReady()) return
+  const [w, h] = mainWindow.getContentSize()
+  try { tabBarView?.setBounds({ x: 0, y: 0, width: w, height: TAB_BAR_H }) } catch {}
+  try { opsView?.setBounds({ x: 0, y: TAB_BAR_H, width: w, height: Math.max(0, h - TAB_BAR_H) }) } catch {}
+}
+
+function sendTabState() {
+  const update = _latestRelease && isNewerVersion(_latestRelease.version, app.getVersion())
+    ? { version: _latestRelease.version, url: _latestRelease.url } : null
+  try {
+    tabBarView?.webContents.send('tab-state', {
+      active: activeTab,
+      version: app.getVersion(),
+      update,
+      maximized: mainWindow?.isMaximized?.() ?? false,
+    })
+  } catch {}
+}
+
+function ensureOpsView() {
+  if (opsView) return
+  opsView = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -1482,72 +1508,169 @@ function showPortalWindow() {
       webSecurity: true,
     },
   })
-
-  const portalOrigin = new URL(portalUrl()).origin
-  // Keep navigation inside the app origin (the OAuth round-trip stays here);
-  // anything else opens in the system browser.
-  portalWindow.webContents.on('will-navigate', (e, url) => {
+  const origin = opsOrigin()
+  // Keep the OAuth round-trip inside the window; send everything else to the
+  // browser. "back to chat" (a link to the server root) switches to the Chat tab.
+  opsView.webContents.on('will-navigate', (e, url) => {
     try {
       const u = new URL(url)
-      if (u.origin !== portalOrigin) { e.preventDefault(); shell.openExternal(url); return }
-      // "back to chat" points at the Fluxer root — send them to the main window
-      // instead of loading the whole chat app in this window.
-      if (u.pathname === '/' || u.pathname === '') {
-        e.preventDefault()
-        if (!isWindowReady()) createWindow(); else { mainWindow.show(); mainWindow.focus() }
-        portalWindow.hide()
-      }
+      if (origin && u.origin !== origin) { e.preventDefault(); shell.openExternal(url); return }
+      if (u.pathname === '/' || u.pathname === '') { e.preventDefault(); setActiveTab('chat') }
     } catch { e.preventDefault() }
   })
-  portalWindow.webContents.setWindowOpenHandler(({ url }) => {
+  opsView.webContents.setWindowOpenHandler(({ url }) => {
     try { shell.openExternal(url) } catch {}
     return { action: 'deny' }
   })
-
-  const saveBounds = () => {
-    if (!portalWindow || portalWindow.isDestroyed() || portalWindow.isMinimized()) return
-    try { saveConfig({ portalBounds: portalWindow.getBounds() }) } catch {}
-  }
-  portalWindow.on('resize', saveBounds)
-  portalWindow.on('move', saveBounds)
-  portalWindow.on('closed', () => { portalWindow = null })
-
-  portalWindow.loadURL(portalUrl())
+  opsView.webContents.on('page-title-updated', e => e.preventDefault())
+  opsView.setVisible(false)
+  mainWindow.contentView.addChildView(opsView)
+  // keep the tab bar on top
+  try { if (tabBarView) mainWindow.contentView.addChildView(tabBarView) } catch {}
+  layoutTabViews()
+  opsView.webContents.loadURL(portalUrl())
 }
 
-// A small "Portal" launcher injected into Fluxer's title bar.
-function injectPortalLauncher() {
+function setActiveTab(name) {
   if (!isWindowReady()) return
-  const js = `(() => {
-    const ID = 'fg-portal-launch';
-    if (document.getElementById(ID)) return;
-    const BAR_SEL = '[class*="titleBar" i],[class*="title-bar" i],[class*="topBar" i],[class*="titlebar" i]';
-    const mk = () => {
-      let el = document.getElementById(ID);
-      if (!el) {
-        el = document.createElement('button');
-        el.id = ID;
-        el.type = 'button';
-        el.textContent = '⬡ Portal';
-        el.title = 'Open the Fighters Guild Portal — Forum, Events, Servers';
-        el.style.cssText = 'font:600 11px system-ui,sans-serif;color:rgba(255,255,255,.7);background:rgba(34,211,238,.12);border:1px solid rgba(34,211,238,.3);border-radius:6px;padding:3px 9px;cursor:pointer;-webkit-app-region:no-drag;white-space:nowrap';
-        el.addEventListener('mouseenter', () => { el.style.background = 'rgba(34,211,238,.22)'; });
-        el.addEventListener('mouseleave', () => { el.style.background = 'rgba(34,211,238,.12)'; });
-        el.addEventListener('click', () => { window.electron && window.electron.openPortal && window.electron.openPortal(); });
-      }
-      const bar = document.querySelector(BAR_SEL);
-      if (bar) {
-        el.style.position = 'static'; el.style.margin = '0 8px';
-        if (!bar.contains(el)) bar.appendChild(el);
-      } else {
-        el.style.position = 'fixed'; el.style.top = '5px'; el.style.right = '150px'; el.style.zIndex = '2147483647';
-        if (el.parentElement !== document.documentElement) document.documentElement.appendChild(el);
-      }
-    };
-    mk();
-    new MutationObserver(mk).observe(document.documentElement, { childList: true, subtree: true });
-  })();`
-  mainWindow.webContents.executeJavaScript(js).catch(() => {})
+  activeTab = name === 'ops' ? 'ops' : 'chat'
+  if (activeTab === 'ops') {
+    ensureOpsView()
+    try { opsView.setVisible(true) } catch {}
+    layoutTabViews()
+    try { opsView.webContents.focus() } catch {}
+  } else {
+    try { opsView?.setVisible(false) } catch {}
+    try { mainWindow.webContents.focus() } catch {}
+  }
+  try { saveConfig({ lastTab: activeTab }) } catch {}
+  sendTabState()
+}
+
+function createTabBar() {
+  // A fresh window — drop any refs to views destroyed with the previous one.
+  tabBarView = null
+  opsView = null
+  activeTab = 'chat'
+  tabBarView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, 'tabbar-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  })
+  mainWindow.contentView.addChildView(tabBarView)
+  const html = tabBarHtml()
+  tabBarView.webContents.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
+  tabBarView.webContents.on('will-navigate', e => e.preventDefault())
+  tabBarView.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  tabBarView.webContents.once('did-finish-load', () => sendTabState())
+  layoutTabViews()
+}
+
+function tabBarHtml() {
+  const winControls = process.platform === 'darwin' ? '' : `
+    <div class="win">
+      <button class="wb" data-w="min" title="Minimise" aria-label="Minimise">&#x2013;</button>
+      <button class="wb" data-w="max" title="Maximise" aria-label="Maximise">&#x25A1;</button>
+      <button class="wb close" data-w="close" title="Close" aria-label="Close">&#x2715;</button>
+    </div>`
+  return `<!doctype html><html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<style>
+  :root{color-scheme:dark}
+  html,body{margin:0;height:100%;overflow:hidden;background:hsl(213,30%,8%);
+    font:600 12px/1 "Segoe UI",system-ui,sans-serif;color:#9fb2c4;user-select:none}
+  .bar{display:flex;align-items:stretch;height:100%;-webkit-app-region:drag}
+  .brand{display:flex;align-items:center;gap:8px;padding:0 14px 0 16px;white-space:nowrap}
+  .brand .dot{width:8px;height:8px;border-radius:50%;background:#22d3ee;box-shadow:0 0 8px #22d3ee}
+  .brand b{color:#e8f1f8;font-weight:700;letter-spacing:.02em}
+  .brand .v{opacity:.5;font-weight:500}
+  .brand .up{color:#e8cf7a;-webkit-app-region:no-drag;cursor:pointer}
+  .tabs{display:flex;align-items:stretch;-webkit-app-region:no-drag}
+  .tab{display:flex;align-items:center;padding:0 18px;cursor:pointer;border:0;background:transparent;
+    color:#8ba0b4;font:inherit;border-bottom:2px solid transparent}
+  .tab:hover{color:#d6e4f0;background:hsla(195,70%,72%,.06)}
+  .tab.on{color:#fff;background:hsla(192,85%,60%,.12);border-bottom-color:#22d3ee}
+  .spring{flex:1;-webkit-app-region:drag}
+  .win{display:flex;-webkit-app-region:no-drag}
+  .wb{width:46px;border:0;background:transparent;color:#9fb2c4;font-size:13px;cursor:pointer;line-height:1}
+  .wb:hover{background:hsla(195,70%,72%,.1);color:#fff}
+  .wb.close:hover{background:#c9433b;color:#fff}
+</style></head><body>
+<div class="bar">
+  <div class="brand"><span class="dot"></span><b>Fighters Guild</b>
+    <span class="v" id="v"></span><span class="up" id="up" hidden></span></div>
+  <div class="tabs">
+    <button class="tab on" data-t="chat" id="t-chat">Chat</button>
+    <button class="tab" data-t="ops" id="t-ops">Ops Center</button>
+  </div>
+  <div class="spring"></div>
+  ${winControls}
+</div>
+<script>
+  const api = window.tabbar;
+  document.querySelectorAll('.tab').forEach(b => b.onclick = () => api.switchTab(b.dataset.t));
+  document.querySelectorAll('.wb').forEach(b => b.onclick = () => api.win(b.dataset.w));
+  document.getElementById('up').onclick = () => api.openUpdate();
+  api.onState(s => {
+    document.getElementById('t-chat').classList.toggle('on', s.active === 'chat');
+    document.getElementById('t-ops').classList.toggle('on', s.active === 'ops');
+    document.getElementById('v').textContent = 'v' + s.version;
+    const up = document.getElementById('up');
+    if (s.update) { up.hidden = false; up.textContent = '· update to v' + s.update.version; up.dataset.url = s.update.url; }
+    else up.hidden = true;
+  });
+</script></body></html>`
+}
+
+// ── Reserve the top TAB_BAR_H px of Fluxer for our tab bar ───────────────────
+// Fluxer already supports a native title bar: html.platform-native insets the
+// whole app grid by var(--native-titlebar-height). We set that var to our tab
+// bar height and hide Fluxer's own title bar (our tab bar replaces it).
+let _fluxerInsetKey = null
+function injectFluxerInset() {
+  if (!isWindowReady()) return
+  const wc = mainWindow.webContents
+  const platformClass = process.platform === 'win32' ? 'platform-windows'
+    : process.platform === 'darwin' ? 'platform-macos' : 'platform-linux'
+  wc.executeJavaScript(`(() => {
+    const h = document.documentElement;
+    h.classList.add('platform-native', ${JSON.stringify(platformClass)});
+    h.classList.remove('native-system-titlebar');
+    h.style.setProperty('--native-titlebar-height', '${TAB_BAR_H}px');
+  })();`).catch(() => {})
+  if (_fluxerInsetKey) { try { wc.removeInsertedCSS(_fluxerInsetKey) } catch {} _fluxerInsetKey = null }
+  wc.insertCSS(`
+    html { --native-titlebar-height: ${TAB_BAR_H}px !important; }
+    #fluxer-startup-native-titlebar,
+    [class*="nativeTitlebar" i],
+    [class*="NativeTitlebar" i] { display: none !important; }
+  `).then(k => { _fluxerInsetKey = k }).catch(() => {})
+}
+
+// ── RSI Blue theme — injected into Fluxer so it's the default look ────────────
+let _rsiThemeKey = null
+function rsiThemeEnabled() {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'config.json'), 'utf8'))
+    if (typeof cfg.rsiTheme === 'boolean') return cfg.rsiTheme
+  } catch {}
+  return true // default on
+}
+function injectRsiTheme() {
+  if (!isWindowReady()) return
+  const wc = mainWindow.webContents
+  if (_rsiThemeKey) { try { wc.removeInsertedCSS(_rsiThemeKey) } catch {} _rsiThemeKey = null }
+  if (!rsiThemeEnabled()) return
+  let css
+  try { css = fs.readFileSync(path.join(__dirname, 'assets', 'rsi-blue.css'), 'utf8') } catch { return }
+  wc.insertCSS(css).then(key => { _rsiThemeKey = key }).catch(() => {})
+}
+function setRsiThemeEnabled(on) {
+  saveConfig({ rsiTheme: !!on })
+  injectRsiTheme()
+  rebuildTrayMenu()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1648,16 +1771,32 @@ function createWindow() {
   // Forward maximize state to the web app
   mainWindow.on('maximize', () => {
     try { mainWindow.webContents.send('window-maximize-change', true) } catch {}
+    sendTabState()
   })
   mainWindow.on('unmaximize', () => {
     try { mainWindow.webContents.send('window-maximize-change', false) } catch {}
+    sendTabState()
   })
+
+  // Keep the tab bar + Ops Center view sized to the window.
+  mainWindow.on('resize', layoutTabViews)
+  mainWindow.on('enter-full-screen', layoutTabViews)
+  mainWindow.on('leave-full-screen', layoutTabViews)
 
   // zoomFilePath is used both in did-finish-load (restore) and the set-zoom-factor handler
   const zoomFilePath = path.join(app.getPath('userData'), 'zoom.json')
 
   mainWindow.loadURL(appUrl)
   mainWindow.once('ready-to-show', () => { try { if (!mainWindow.isDestroyed()) mainWindow.show() } catch {} })
+
+  // Top tab bar (Chat | Ops Center). Restore whichever tab was open last.
+  createTabBar()
+  let lastTab = 'chat'
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'config.json'), 'utf8'))
+    if (cfg.lastTab === 'ops') lastTab = 'ops'
+  } catch {}
+  if (lastTab === 'ops') setActiveTab('ops')
 
   // Show a friendly error page if the server is unreachable
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
@@ -1725,8 +1864,9 @@ function configure(){if(window.electron&&window.electron.configureServer){clearI
   mainWindow.webContents.on('dom-ready', () => {
     const url = mainWindow.webContents.getURL()
     if (url.startsWith('data:') || url.startsWith('chrome')) return
+    injectFluxerInset()
     injectVoiceDiag()
-    injectPortalLauncher()
+    injectRsiTheme()
   })
 
   // CSS drag-region fallback — ensures window is draggable on frameless platforms
@@ -1757,8 +1897,8 @@ function configure(){if(window.electron&&window.electron.configureServer){clearI
       }
     `).catch(err => console.debug('[DragRegion] CSS injection failed:', err.message))
 
-    injectTitlebarMark()
-    injectPortalLauncher()
+    injectFluxerInset()
+    injectRsiTheme()
     injectVoiceDiag()
   })
 
@@ -1939,14 +2079,19 @@ function rebuildTrayMenu() {
     { label: `Fighters Guild v${app.getVersion()}`, enabled: false },
     ...updateItem,
     {
-      label: 'Open Fighters Guild',
+      label: 'Open — Chat',
       click: () => {
         if (!isWindowReady()) { createWindow(); return }
-        mainWindow.show()
-        mainWindow.focus()
+        mainWindow.show(); mainWindow.focus(); setActiveTab('chat')
       },
     },
-    { label: 'Open Portal — Forum, Events, Servers', click: () => showPortalWindow() },
+    {
+      label: 'Open — Ops Center',
+      click: () => {
+        if (!isWindowReady()) { createWindow(); return }
+        mainWindow.show(); mainWindow.focus(); setActiveTab('ops')
+      },
+    },
     { label: 'Check for updates…', click: () => checkForUpdates('user') },
     { type: 'separator' },
     {
@@ -1999,10 +2144,10 @@ function rebuildTrayMenu() {
       ],
     },
     {
-      label: 'Show icon in title bar',
+      label: 'RSI Blue theme',
       type: 'checkbox',
-      checked: titlebarMarkEnabled(),
-      click: m => setTitlebarMarkEnabled(m.checked),
+      checked: rsiThemeEnabled(),
+      click: m => setRsiThemeEnabled(m.checked),
     },
     {
       label: 'Force direct voice connection',
