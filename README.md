@@ -79,11 +79,27 @@ Output lands in `dist/`.
 
 ---
 
-## Roadmap
+## Credits
 
----
+| | | License |
+|---|---|---|
+| [**Fluxer**](https://github.com/fluxerapp/fluxer) | the chat platform (server, web app, gateway/voice protocol) this app is a client for — all credit for it goes to the Fluxer team | AGPL-3.0 |
+| [**fluxer-client**](https://github.com/shadowflee3/fluxer-client) by shadowflee | the community Electron wrapper this build is forked from and rebranded | see note ¹ |
+| [**Electron**](https://www.electronjs.org) | the desktop runtime | MIT |
+| [`uiohook-napi`](https://github.com/SnosMe/uiohook-napi) | global push-to-talk / keybinds | MIT |
+| [`sharp`](https://sharp.pixelplumbing.com), [`png-to-ico`](https://github.com/steambap/png-to-ico), [`electron-builder`](https://www.electron.build) | icon generation + packaging (build only) | Apache-2.0 / MIT |
+| AutoTrackR2, citizenmon and other community kill-trackers | the `Game.log` line formats the killfeed matches are the ones these tools established | their own |
+
+¹ `fluxer-client` ships without an explicit license file. This fork is used and
+distributed in good faith as a community wrapper of AGPL software, with full
+credit above; check with the original author before redistributing.
+
+**Star Citizen®**, **Squadron 42®**, **Roberts Space Industries®** and **Cloud
+Imperium®** are trademarks of Cloud Imperium Rights LLC. This is an unofficial fan
+project, **not affiliated with or endorsed by Cloud Imperium Games**.
 
 ## License
 
-Wrapper code: as-is, for guild use. The Fluxer platform it loads is
-[GNU AGPL v3](https://www.gnu.org/licenses/agpl-3.0.html).
+Copyright © 2026 Fighters Guild. Licensed under the
+[GNU AGPL v3](https://www.gnu.org/licenses/agpl-3.0.html) — see [`LICENSE`](LICENSE).
+The Fluxer platform it connects to is likewise AGPL-3.0.
