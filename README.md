@@ -81,11 +81,6 @@ Output lands in `dist/`.
 
 ## Roadmap
 
-- **Phase 2** — a small webhook service alongside the server: RSI status,
-  patch-notes feed, org fleet / trade data (Fleetyards, UEX Corp).
-- **Phase 3** — Star Citizen panels inside this app: trade/mining calculators,
-  ship browser, and a `Game.log` killfeed that posts to a channel.
-
 ---
 
 ## License
