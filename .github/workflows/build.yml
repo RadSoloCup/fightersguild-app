@@ -17,7 +17,8 @@ jobs:
       - name: Write server default
         env:
           FG_SERVER_URL: ${{ secrets.FG_SERVER_URL || vars.FG_SERVER_URL }}
-        run: node -e "require('fs').writeFileSync('default-server.json', JSON.stringify({serverUrl: process.env.FG_SERVER_URL || ''}))"
+        run: >
+          node -e "const fs=require('fs'); const u=process.env.FG_SERVER_URL||''; fs.writeFileSync('default-server.json', JSON.stringify({serverUrl:u}))"
       - run: npm install
       - run: node scripts/create-icon.js
       - run: npx electron-builder --win --x64 --publish never
@@ -41,7 +42,8 @@ jobs:
       - name: Write server default
         env:
           FG_SERVER_URL: ${{ secrets.FG_SERVER_URL || vars.FG_SERVER_URL }}
-        run: node -e "require('fs').writeFileSync('default-server.json', JSON.stringify({serverUrl: process.env.FG_SERVER_URL || ''}))"
+        run: >
+          node -e "const fs=require('fs'); const u=process.env.FG_SERVER_URL||''; fs.writeFileSync('default-server.json', JSON.stringify({serverUrl:u}))"
       - run: npm install
       - run: node scripts/create-icon.js
       - run: npx electron-builder --linux AppImage deb rpm pacman --x64 --publish never
@@ -72,7 +74,8 @@ jobs:
       - name: Write server default
         env:
           FG_SERVER_URL: ${{ secrets.FG_SERVER_URL || vars.FG_SERVER_URL }}
-        run: node -e "require('fs').writeFileSync('default-server.json', JSON.stringify({serverUrl: process.env.FG_SERVER_URL || ''}))"
+        run: >
+          node -e "const fs=require('fs'); const u=process.env.FG_SERVER_URL||''; fs.writeFileSync('default-server.json', JSON.stringify({serverUrl:u}))"
       - run: npm install
       - run: node scripts/create-icon.js
       - run: npx electron-builder --linux flatpak --x64 --publish never
