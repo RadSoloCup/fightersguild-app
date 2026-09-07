@@ -51,6 +51,9 @@ const api = {
   // External links
   openExternal: url => ipcRenderer.invoke('open-external', url),
 
+  // Open the Fighters Guild Portal (Forum / Events / Servers) in its own window
+  openPortal: () => ipcRenderer.send('open-portal'),
+
   // Clipboard
   clipboardWriteText: text => ipcRenderer.invoke('clipboard-write-text', text),
   clipboardReadText: () => ipcRenderer.invoke('clipboard-read-text'),

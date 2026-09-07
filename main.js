@@ -780,6 +780,7 @@ function registerIpcHandlers() {
   }))
 
   // Window controls
+  ipcMain.on('open-portal', () => { try { showPortalWindow() } catch (e) { console.warn('open-portal:', e.message) } })
   ipcMain.on('window-minimize', () => { try { if (isWindowReady()) mainWindow.minimize() } catch {} })
   ipcMain.on('window-maximize', () => {
     try {
@@ -1445,6 +1446,111 @@ refresh()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Portal window — the Forum / Events / Servers web app, served at <server>/portal.
+// Runs in the default session so the Fluxer login cookie carries over and the
+// Portal's OAuth sign-in completes silently.
+// ─────────────────────────────────────────────────────────────────────────────
+let portalWindow = null
+function portalUrl() {
+  const base = (appUrl || APP_URL).replace(/\/$/, '')
+  return `${base}/portal`
+}
+function showPortalWindow() {
+  if (portalWindow && !portalWindow.isDestroyed()) {
+    portalWindow.show(); portalWindow.focus(); return
+  }
+  let bounds = { width: 1120, height: 800 }
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'config.json'), 'utf8'))
+    if (cfg.portalBounds && typeof cfg.portalBounds.width === 'number') bounds = cfg.portalBounds
+  } catch {}
+
+  portalWindow = new BrowserWindow({
+    ...bounds,
+    minWidth: 720,
+    minHeight: 560,
+    title: `${APP_NAME} — Portal`,
+    icon: nativeImage.createFromPath(ICON_PATH),
+    backgroundColor: '#0a121c',
+    autoHideMenuBar: true,
+    frame: process.platform !== 'darwin',
+    titleBarStyle: 'hidden',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: true,
+    },
+  })
+
+  const portalOrigin = new URL(portalUrl()).origin
+  // Keep navigation inside the app origin (the OAuth round-trip stays here);
+  // anything else opens in the system browser.
+  portalWindow.webContents.on('will-navigate', (e, url) => {
+    try {
+      const u = new URL(url)
+      if (u.origin !== portalOrigin) { e.preventDefault(); shell.openExternal(url); return }
+      // "back to chat" points at the Fluxer root — send them to the main window
+      // instead of loading the whole chat app in this window.
+      if (u.pathname === '/' || u.pathname === '') {
+        e.preventDefault()
+        if (!isWindowReady()) createWindow(); else { mainWindow.show(); mainWindow.focus() }
+        portalWindow.hide()
+      }
+    } catch { e.preventDefault() }
+  })
+  portalWindow.webContents.setWindowOpenHandler(({ url }) => {
+    try { shell.openExternal(url) } catch {}
+    return { action: 'deny' }
+  })
+
+  const saveBounds = () => {
+    if (!portalWindow || portalWindow.isDestroyed() || portalWindow.isMinimized()) return
+    try { saveConfig({ portalBounds: portalWindow.getBounds() }) } catch {}
+  }
+  portalWindow.on('resize', saveBounds)
+  portalWindow.on('move', saveBounds)
+  portalWindow.on('closed', () => { portalWindow = null })
+
+  portalWindow.loadURL(portalUrl())
+}
+
+// A small "Portal" launcher injected into Fluxer's title bar.
+function injectPortalLauncher() {
+  if (!isWindowReady()) return
+  const js = `(() => {
+    const ID = 'fg-portal-launch';
+    if (document.getElementById(ID)) return;
+    const BAR_SEL = '[class*="titleBar" i],[class*="title-bar" i],[class*="topBar" i],[class*="titlebar" i]';
+    const mk = () => {
+      let el = document.getElementById(ID);
+      if (!el) {
+        el = document.createElement('button');
+        el.id = ID;
+        el.type = 'button';
+        el.textContent = '⬡ Portal';
+        el.title = 'Open the Fighters Guild Portal — Forum, Events, Servers';
+        el.style.cssText = 'font:600 11px system-ui,sans-serif;color:rgba(255,255,255,.7);background:rgba(34,211,238,.12);border:1px solid rgba(34,211,238,.3);border-radius:6px;padding:3px 9px;cursor:pointer;-webkit-app-region:no-drag;white-space:nowrap';
+        el.addEventListener('mouseenter', () => { el.style.background = 'rgba(34,211,238,.22)'; });
+        el.addEventListener('mouseleave', () => { el.style.background = 'rgba(34,211,238,.12)'; });
+        el.addEventListener('click', () => { window.electron && window.electron.openPortal && window.electron.openPortal(); });
+      }
+      const bar = document.querySelector(BAR_SEL);
+      if (bar) {
+        el.style.position = 'static'; el.style.margin = '0 8px';
+        if (!bar.contains(el)) bar.appendChild(el);
+      } else {
+        el.style.position = 'fixed'; el.style.top = '5px'; el.style.right = '150px'; el.style.zIndex = '2147483647';
+        if (el.parentElement !== document.documentElement) document.documentElement.appendChild(el);
+      }
+    };
+    mk();
+    new MutationObserver(mk).observe(document.documentElement, { childList: true, subtree: true });
+  })();`
+  mainWindow.webContents.executeJavaScript(js).catch(() => {})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Window
 // ─────────────────────────────────────────────────────────────────────────────
 function createWindow() {
@@ -1620,6 +1726,7 @@ function configure(){if(window.electron&&window.electron.configureServer){clearI
     const url = mainWindow.webContents.getURL()
     if (url.startsWith('data:') || url.startsWith('chrome')) return
     injectVoiceDiag()
+    injectPortalLauncher()
   })
 
   // CSS drag-region fallback — ensures window is draggable on frameless platforms
@@ -1651,6 +1758,7 @@ function configure(){if(window.electron&&window.electron.configureServer){clearI
     `).catch(err => console.debug('[DragRegion] CSS injection failed:', err.message))
 
     injectTitlebarMark()
+    injectPortalLauncher()
     injectVoiceDiag()
   })
 
@@ -1838,6 +1946,7 @@ function rebuildTrayMenu() {
         mainWindow.focus()
       },
     },
+    { label: 'Open Portal — Forum, Events, Servers', click: () => showPortalWindow() },
     { label: 'Check for updates…', click: () => checkForUpdates('user') },
     { type: 'separator' },
     {
