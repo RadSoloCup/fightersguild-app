@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('tabbar', {
   switchTab: name => ipcRenderer.send('tab-switch', name === 'ops' ? 'ops' : 'chat'),
+  opsNav: action => ipcRenderer.send('ops-nav', action),
   openUpdate: () => ipcRenderer.send('open-update'),
   win: action => {
     if (action === 'min') ipcRenderer.send('window-minimize')

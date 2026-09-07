@@ -789,6 +789,17 @@ function registerIpcHandlers() {
     } catch (e) { console.warn('tab-switch:', e.message) }
   })
   ipcMain.on('open-update', () => { try { if (_latestRelease?.url) shell.openExternal(_latestRelease.url) } catch {} })
+  ipcMain.on('ops-nav', (_e, action) => {
+    try {
+      const wc = opsView?.webContents
+      if (!wc) return
+      const nav = wc.navigationHistory
+      if (action === 'back') { nav ? (nav.canGoBack() && nav.goBack()) : wc.goBack() }
+      else if (action === 'forward') { nav ? (nav.canGoForward() && nav.goForward()) : wc.goForward() }
+      else if (action === 'reload') wc.reload()
+      else if (action === 'home') wc.loadURL(portalUrl())
+    } catch (e) { console.warn('ops-nav:', e.message) }
+  })
   ipcMain.on('window-minimize', () => { try { if (isWindowReady()) mainWindow.minimize() } catch {} })
   ipcMain.on('window-maximize', () => {
     try {
@@ -1488,12 +1499,20 @@ function layoutTabViews() {
 function sendTabState() {
   const update = _latestRelease && isNewerVersion(_latestRelease.version, app.getVersion())
     ? { version: _latestRelease.version, url: _latestRelease.url } : null
+  let canBack = false, canFwd = false
+  try {
+    const nav = opsView?.webContents?.navigationHistory
+    canBack = nav ? nav.canGoBack() : (opsView?.webContents?.canGoBack?.() ?? false)
+    canFwd = nav ? nav.canGoForward() : (opsView?.webContents?.canGoForward?.() ?? false)
+  } catch {}
   try {
     tabBarView?.webContents.send('tab-state', {
       active: activeTab,
       version: app.getVersion(),
       update,
       maximized: mainWindow?.isMaximized?.() ?? false,
+      canBack,
+      canFwd,
     })
   } catch {}
 }
@@ -1523,6 +1542,9 @@ function ensureOpsView() {
     return { action: 'deny' }
   })
   opsView.webContents.on('page-title-updated', e => e.preventDefault())
+  opsView.webContents.on('did-navigate', () => sendTabState())
+  opsView.webContents.on('did-navigate-in-page', () => sendTabState())
+  opsView.webContents.on('did-finish-load', () => sendTabState())
   opsView.setVisible(false)
   mainWindow.contentView.addChildView(opsView)
   // keep the tab bar on top
@@ -1592,6 +1614,12 @@ function tabBarHtml() {
     color:#8ba0b4;font:inherit;border-bottom:2px solid transparent}
   .tab:hover{color:#d6e4f0;background:hsla(195,70%,72%,.06)}
   .tab.on{color:#fff;background:hsla(192,85%,60%,.12);border-bottom-color:#22d3ee}
+  .nav{display:none;align-items:center;gap:2px;padding:0 8px;-webkit-app-region:no-drag}
+  .nav.show{display:flex}
+  .nb{width:28px;height:26px;border:0;border-radius:6px;background:transparent;color:#9fb2c4;
+    font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .nb:hover:not(:disabled){background:hsla(195,70%,72%,.12);color:#fff}
+  .nb:disabled{opacity:.28;cursor:default}
   .spring{flex:1;-webkit-app-region:drag}
   .win{display:flex;-webkit-app-region:no-drag}
   .wb{width:46px;border:0;background:transparent;color:#9fb2c4;font-size:13px;cursor:pointer;line-height:1}
@@ -1605,6 +1633,12 @@ function tabBarHtml() {
     <button class="tab on" data-t="chat" id="t-chat">Chat</button>
     <button class="tab" data-t="ops" id="t-ops">Ops Center</button>
   </div>
+  <div class="nav" id="nav">
+    <button class="nb" id="n-back" data-n="back" title="Back">&#x2039;</button>
+    <button class="nb" id="n-fwd" data-n="forward" title="Forward">&#x203A;</button>
+    <button class="nb" id="n-reload" data-n="reload" title="Reload">&#x21BB;</button>
+    <button class="nb" id="n-home" data-n="home" title="Ops Center home">&#x2302;</button>
+  </div>
   <div class="spring"></div>
   ${winControls}
 </div>
@@ -1612,10 +1646,14 @@ function tabBarHtml() {
   const api = window.tabbar;
   document.querySelectorAll('.tab').forEach(b => b.onclick = () => api.switchTab(b.dataset.t));
   document.querySelectorAll('.wb').forEach(b => b.onclick = () => api.win(b.dataset.w));
+  document.querySelectorAll('.nb').forEach(b => b.onclick = () => api.opsNav(b.dataset.n));
   document.getElementById('up').onclick = () => api.openUpdate();
   api.onState(s => {
     document.getElementById('t-chat').classList.toggle('on', s.active === 'chat');
     document.getElementById('t-ops').classList.toggle('on', s.active === 'ops');
+    document.getElementById('nav').classList.toggle('show', s.active === 'ops');
+    document.getElementById('n-back').disabled = !s.canBack;
+    document.getElementById('n-fwd').disabled = !s.canFwd;
     document.getElementById('v').textContent = 'v' + s.version;
     const up = document.getElementById('up');
     if (s.update) { up.hidden = false; up.textContent = '· update to v' + s.update.version; up.dataset.url = s.update.url; }
