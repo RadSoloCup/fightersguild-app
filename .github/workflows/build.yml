@@ -1,0 +1,121 @@
+name: Build installers
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Write server default
+        env:
+          FG_SERVER_URL: ${{ secrets.FG_SERVER_URL || vars.FG_SERVER_URL }}
+        run: node -e "require('fs').writeFileSync('default-server.json', JSON.stringify({serverUrl: process.env.FG_SERVER_URL || ''}))"
+      - run: npm install
+      - run: node scripts/create-icon.js
+      - run: npx electron-builder --win --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fighters-guild-windows
+          path: dist/*.exe
+
+  # AppImage (any distro) + deb (Ubuntu/Debian/Mint/Pop) + rpm (Fedora/openSUSE/Nobara)
+  # + pacman (Arch/CachyOS/EndeavourOS)
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # bsdtar (libarchive-tools) is needed by fpm for the pacman target;
+      # rpm for the rpm target. Neither is preinstalled on ubuntu-latest.
+      - run: sudo apt-get update && sudo apt-get install -y libarchive-tools rpm
+      - name: Write server default
+        env:
+          FG_SERVER_URL: ${{ secrets.FG_SERVER_URL || vars.FG_SERVER_URL }}
+        run: node -e "require('fs').writeFileSync('default-server.json', JSON.stringify({serverUrl: process.env.FG_SERVER_URL || ''}))"
+      - run: npm install
+      - run: node scripts/create-icon.js
+      - run: npx electron-builder --linux AppImage deb rpm pacman --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fighters-guild-linux
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.rpm
+            dist/*.pacman
+
+  # Flatpak: the right format for immutable / atomic distros
+  # (SteamOS, Bazzite, Fedora Silverblue/Kinoite) and works everywhere else too.
+  build-flatpak:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install flatpak tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder elfutils
+          sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          sudo flatpak install -y flathub org.freedesktop.Platform//23.08 org.freedesktop.Sdk//23.08 org.electronjs.Electron2.BaseApp//23.08
+      - name: Write server default
+        env:
+          FG_SERVER_URL: ${{ secrets.FG_SERVER_URL || vars.FG_SERVER_URL }}
+        run: node -e "require('fs').writeFileSync('default-server.json', JSON.stringify({serverUrl: process.env.FG_SERVER_URL || ''}))"
+      - run: npm install
+      - run: node scripts/create-icon.js
+      - run: npx electron-builder --linux flatpak --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fighters-guild-flatpak
+          path: dist/*.flatpak
+
+  # On a v* tag: gather every build artifact and publish a GitHub Release.
+  release:
+    needs: [build-windows, build-linux, build-flatpak]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # download-artifact drops each artifact's files in its own subdir,
+          # so artifacts/*/* is exactly the installer files (no dirs).
+          files=(artifacts/*/*)
+          printf '%s\n' "${files[@]}"
+          # The annotated tag's subject line is the release codename (two words,
+          # space-themed). Re-fetch the tag object explicitly — checkout can
+          # leave it peeled to the commit. Falls back to the bare tag.
+          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME" || true
+          codename="$(git for-each-ref "refs/tags/$GITHUB_REF_NAME" --format='%(contents:subject)')"
+          case "$codename" in ''|"$(git log -1 --format=%s)") codename='' ;; esac
+          title="$GITHUB_REF_NAME"
+          [ -n "$codename" ] && title="$GITHUB_REF_NAME — $codename"
+          gh release create "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$title" \
+              --generate-notes \
+              "${files[@]}" \
+          || gh release upload "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" --clobber "${files[@]}"

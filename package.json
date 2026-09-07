@@ -1,0 +1,117 @@
+{
+  "name": "fighters-guild",
+  "version": "1.1.9",
+  "description": "Fighters Guild Desktop — native client for the Fighters Guild chat server",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "create-icon": "node scripts/create-icon.js",
+    "build": "npm run create-icon && electron-builder --win --x64",
+    "build:win": "npm run create-icon && electron-builder --win --x64",
+    "build:linux": "npm run create-icon && electron-builder --linux --x64",
+    "build:all": "npm run create-icon && electron-builder --win --linux --x64",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "build": {
+    "appId": "quest.playit.fightersguild",
+    "productName": "Fighters Guild",
+    "copyright": "Copyright © 2026 Fighters Guild",
+    "artifactName": "fighters-guild-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "config-preload.js",
+      "killfeed-preload.js",
+      "killtracker.js",
+      "default-server.json",
+      "assets/**",
+      "node_modules/**"
+    ],
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] },
+        { "target": "rpm", "arch": ["x64"] },
+        { "target": "pacman", "arch": ["x64"] }
+      ],
+      "icon": "assets/icon.png",
+      "category": "Network",
+      "executableName": "fighters-guild",
+      "maintainer": "Fighters Guild <admin@example.com>",
+      "vendor": "Fighters Guild",
+      "synopsis": "Fighters Guild chat client",
+      "description": "Desktop client for the Fighters Guild Fluxer server.",
+      "desktop": {
+        "entry": {
+          "Name": "Fighters Guild",
+          "StartupWMClass": "Fighters Guild"
+        }
+      }
+    },
+    "flatpak": {
+      "runtimeVersion": "23.08",
+      "baseVersion": "23.08"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "category": "public.app-category.social-networking",
+      "darkModeSupport": true
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "signAndEditExecutable": false,
+      "certificateSubjectName": null,
+      "certificateSha1": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Fighters Guild",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
+    }
+  },
+  "author": {
+    "name": "Fighters Guild"
+  },
+  "homepage": "https://github.com/RadSoloCup/fightersguild-app",
+  "dependencies": {
+    "uiohook-napi": "^1.5.4"
+  },
+  "devDependencies": {
+    "electron": "^33.3.0",
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^2.1.8",
+    "sharp": "^0.33.5"
+  }
+}

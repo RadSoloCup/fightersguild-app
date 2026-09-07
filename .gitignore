@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.log
+
+# Build-time server default — written by CI from the FG_SERVER_URL repo variable,
+# or create it locally for dev builds:  echo '{"serverUrl":"https://your.server"}' > default-server.json
+default-server.json
