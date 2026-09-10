@@ -1549,18 +1549,23 @@ function ensureOpsView() {
     },
   })
   const origin = opsOrigin()
+  // Only ever hand http/https URLs to the OS browser.
+  const openSafe = url => {
+    try { if (['http:', 'https:', 'mailto:'].includes(new URL(url).protocol)) shell.openExternal(url) } catch {}
+  }
   // Keep the OAuth round-trip inside the window; send everything else to the
   // browser. "back to chat" (a link to the server root) switches to the Chat tab.
   opsView.webContents.on('will-navigate', (e, url) => {
     let u
-    try { u = new URL(url) } catch { return } // unparseable — let Chromium handle it
-    if (origin && u.origin !== origin) { e.preventDefault(); shell.openExternal(url); return }
+    try { u = new URL(url) } catch { e.preventDefault(); return } // unparseable, block it
+    if (!['http:', 'https:'].includes(u.protocol)) { e.preventDefault(); return }
+    if (origin && u.origin !== origin) { e.preventDefault(); openSafe(url); return }
     // The portal's "back to chat" link points at the bare server root. Only treat
-    // a plain "/" with no query as that — OAuth bounces through query-bearing URLs.
+    // a plain "/" with no query as that; OAuth bounces through query-bearing URLs.
     if ((u.pathname === '/' || u.pathname === '') && !u.search) { e.preventDefault(); setActiveTab('chat') }
   })
   opsView.webContents.setWindowOpenHandler(({ url }) => {
-    try { shell.openExternal(url) } catch {}
+    openSafe(url)
     return { action: 'deny' }
   })
   opsView.webContents.on('page-title-updated', e => e.preventDefault())
