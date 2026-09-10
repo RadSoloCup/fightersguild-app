@@ -48,6 +48,12 @@ Everything the guild would pay Nitro for (bigger uploads, higher quality voice
 and screen share, longer messages, a themed client) is a server setting here, not
 a subscription.
 
+The choice is yours, our Discord server is still open and operational. The idea
+Is to allow users a choice between the two, while still maintaining functionality
+across both platforms. This is where crosstalk allows both to function cohesively. 
+
+SC/Mission Bots will be ported to discord at a future date
+
 ---
 
 ## The Ops Center
