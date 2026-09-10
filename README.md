@@ -195,3 +195,7 @@ Imperium Games.
 Copyright &copy; 2026 Fighters Guild. Licensed under the
 [GNU AGPL v3](https://www.gnu.org/licenses/agpl-3.0.html), see [`LICENSE`](LICENSE).
 The Fluxer platform it connects to is likewise AGPL-3.0.
+
+---
+
+Made in Canada 🇨🇦
