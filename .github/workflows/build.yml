@@ -108,13 +108,13 @@ jobs:
           files=(artifacts/*/*)
           printf '%s\n' "${files[@]}"
           # The annotated tag's subject line is the release codename (two words,
-          # space-themed). Re-fetch the tag object explicitly — checkout can
+          # space-themed). Re-fetch the tag object explicitly because checkout can
           # leave it peeled to the commit. Falls back to the bare tag.
           git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME" || true
           codename="$(git for-each-ref "refs/tags/$GITHUB_REF_NAME" --format='%(contents:subject)')"
           case "$codename" in ''|"$(git log -1 --format=%s)") codename='' ;; esac
           title="$GITHUB_REF_NAME"
-          [ -n "$codename" ] && title="$GITHUB_REF_NAME — $codename"
+          [ -n "$codename" ] && title="$GITHUB_REF_NAME · $codename"
           gh release create "$GITHUB_REF_NAME" \
               --repo "$GITHUB_REPOSITORY" \
               --title "$title" \
