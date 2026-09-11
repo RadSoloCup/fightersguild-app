@@ -376,6 +376,7 @@ async function checkForUpdates(context = 'background') {
   const send = (type, extra) => {
     try { if (isWindowReady()) mainWindow.webContents.send('updater-event', { type, context, ...extra }) } catch {}
   }
+  const isUser = context === 'user'
   send('checking')
   try {
     const rel = await fetchLatestRelease()
@@ -388,18 +389,47 @@ async function checkForUpdates(context = 'background') {
         _updateNotified = true
         const n = new Notification({
           title: `${APP_NAME} ${rel.version} is available`,
-          body: rel.name && rel.name !== rel.version ? `“${rel.name}” — click to download` : 'Click to open the download page',
+          body: rel.name && rel.name !== rel.version ? `"${rel.name}", click to download` : 'Click to open the download page',
         })
         n.on('click', () => shell.openExternal(rel.url))
         n.show()
       }
+      // A manual check always gets a visible result, notifications aside.
+      if (isUser) {
+        const res = await dialog.showMessageBox({
+          type: 'info',
+          title: 'Update available',
+          message: `${APP_NAME} ${rel.version} is available`,
+          detail: `You're on v${app.getVersion()}.${rel.name && rel.name !== `v${rel.version}` ? `\n\n${rel.name}` : ''}`,
+          buttons: ['Open download page', 'Later'],
+          defaultId: 0,
+          cancelId: 1,
+        })
+        if (res.response === 0) shell.openExternal(rel.url)
+      }
       return _latestRelease
     }
     send('not-available', { version: app.getVersion() })
+    if (isUser) {
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'No update available',
+        message: `You're up to date`,
+        detail: `${APP_NAME} v${app.getVersion()} is the latest version.`,
+      })
+    }
     return null
   } catch (err) {
     console.error('[Updater] check failed:', err.message)
     send('error', { message: err.message })
+    if (isUser) {
+      dialog.showMessageBox({
+        type: 'warning',
+        title: 'Could not check for updates',
+        message: 'The update check failed.',
+        detail: err.message,
+      })
+    }
     return null
   }
 }
@@ -2319,6 +2349,11 @@ function createTray() {
 // ─────────────────────────────────────────────────────────────────────────────
 // App lifecycle
 // ─────────────────────────────────────────────────────────────────────────────
+// Windows ties native toast notifications (and their click handler) to this id;
+// without it set to match the installer's shortcut, update notifications can
+// silently fail to show on some Windows installs.
+if (process.platform === 'win32') { try { app.setAppUserModelId('quest.playit.fightersguild') } catch {} }
+
 app.whenReady().then(() => {
   const savedUrl = loadServerUrl()
   if (savedUrl) appUrl = savedUrl // keep APP_URL as fallback so appUrl is never null
