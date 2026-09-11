@@ -1,0 +1,101 @@
+/* ===========================================================================
+   Fighters Guild, "Drake"  ·  a Drake Interplanetary cockpit look for Fluxer
+   Near-black warm surfaces, marigold amber HUD accents, hazard red for danger.
+
+   Apply:  Settings, then Appearance, pick the Dark theme, then Theme Studio,
+   Quick CSS and paste this in. Changes apply instantly.
+   Keeps var(--saturation-factor) so the Saturation slider still works.
+   =========================================================================== */
+
+.theme-dark {
+  /* ── surfaces (warm near-black, hue 28) ─────────────────────────────── */
+  --background-primary:            hsl(28, calc(22% * var(--saturation-factor)), 5.4%);
+  --background-secondary:          hsl(28, calc(20% * var(--saturation-factor)), 8%);
+  --background-secondary-lighter:  hsl(28, calc(19% * var(--saturation-factor)), 9.6%);
+  --background-secondary-alt:      hsl(28, calc(18% * var(--saturation-factor)), 11.2%);
+  --background-tertiary:           hsl(26, calc(24% * var(--saturation-factor)), 3.6%);
+  --background-header-primary:     hsl(28, calc(18% * var(--saturation-factor)), 12.6%);
+  --background-header-primary-hover:hsl(28, calc(18% * var(--saturation-factor)), 15.4%);
+  --background-header-secondary:   hsl(28, calc(18% * var(--saturation-factor)), 11%);
+  --background-channel-header:     hsl(28, calc(19% * var(--saturation-factor)), 10.4%);
+  --background-textarea:           hsl(28, calc(19% * var(--saturation-factor)), 11.6%);
+  --composer-surface-color:        hsl(28, calc(19% * var(--saturation-factor)), 10.4%);
+
+  --bg-primary:    var(--background-primary);
+  --bg-secondary:  var(--background-secondary);
+  --bg-tertiary:   var(--background-secondary-alt);
+  --bg-hover:      hsla(36, calc(90% * var(--saturation-factor)), 58%, 0.06);
+  --bg-active:     hsla(34, calc(96% * var(--saturation-factor)), 52%, 0.14);
+
+  --guilds-layout-item-bg:  hsl(28, calc(20% * var(--saturation-factor)), 12.5%);
+  --guild-list-foreground:  hsl(26, calc(16% * var(--saturation-factor)), 19%);
+
+  /* ── hover / selected / accent tints (amber) ────────────────────────── */
+  --background-modifier-hover:        hsla(36, calc(90% * var(--saturation-factor)), 58%, 0.06);
+  --background-modifier-selected:     hsla(34, calc(96% * var(--saturation-factor)), 52%, 0.14);
+  --background-modifier-accent:       hsla(34, calc(70% * var(--saturation-factor)), 55%, 0.16);
+  --background-modifier-accent-focus: hsla(38, calc(95% * var(--saturation-factor)), 58%, 0.36);
+  --surface-interactive-hover-bg:     hsla(36, calc(90% * var(--saturation-factor)), 58%, 0.07);
+  --surface-interactive-selected-bg:  hsla(34, calc(96% * var(--saturation-factor)), 52%, 0.16);
+
+  /* ── text (warm off-white) ─────────────────────────────────────────── */
+  --text-primary:      hsl(36, calc(24% * var(--saturation-factor)), 93%);
+  --text-primary-muted:hsl(34, calc(16% * var(--saturation-factor)), 72%);
+  --text-secondary:    hsl(34, calc(18% * var(--saturation-factor)), 82%);
+  --text-tertiary:     hsl(32, calc(13% * var(--saturation-factor)), 60%);
+  --text-tertiary-secondary: hsl(33, calc(13% * var(--saturation-factor)), 67%);
+  --text-tertiary-muted:     hsl(30, calc(11% * var(--saturation-factor)), 50%);
+  --text-chat:         hsl(36, calc(20% * var(--saturation-factor)), 91%);
+  --text-chat-muted:   hsl(32, calc(13% * var(--saturation-factor)), 64%);
+  --text-link:         hsl(38, calc(96% * var(--saturation-factor)), 60%);
+  --text-selection:    hsla(34, calc(96% * var(--saturation-factor)), 52%, 0.30);
+  --text-on-brand-primary: hsl(28, 40%, 6%);
+  --interactive-active:hsl(40, calc(100% * var(--saturation-factor)), 68%);
+  --interactive-muted: hsl(30, calc(12% * var(--saturation-factor)), 40%);
+
+  /* ── brand + accents (Drake marigold amber) ────────────────────────── */
+  --brand-primary:        hsl(34, calc(96% * var(--saturation-factor)), 52%);
+  --brand-primary-light:  hsl(40, calc(100% * var(--saturation-factor)), 66%);
+  --brand-secondary:      hsl(30, calc(92% * var(--saturation-factor)), 42%);
+  --brand-primary-fill:   hsl(28, 40%, 6%);
+
+  --accent-primary: hsl(34, calc(96% * var(--saturation-factor)), 52%);
+  --accent-info:    hsl(184, calc(62% * var(--saturation-factor)), 50%);
+  --accent-purple:  hsl(18, calc(78% * var(--saturation-factor)), 55%);
+  --accent-success: hsl(112, calc(52% * var(--saturation-factor)), 46%);
+  --accent-warning: hsl(44, calc(96% * var(--saturation-factor)), 56%);
+  --accent-danger:  hsl(4, calc(82% * var(--saturation-factor)), 54%);
+
+  --focus-primary: #f59e0b;
+
+  --button-primary-fill: hsl(34, calc(96% * var(--saturation-factor)), 52%);
+  --button-primary-text: hsl(28, 45%, 7%);
+  --button-primary-active-fill: hsl(32, calc(96% * var(--saturation-factor)), 46%);
+
+  /* ── lines ─────────────────────────────────────────────────────────── */
+  --border-color:       hsla(34, calc(85% * var(--saturation-factor)), 55%, 0.16);
+  --border-color-hover: hsla(38, calc(95% * var(--saturation-factor)), 58%, 0.36);
+  --border-color-focus: hsla(38, calc(100% * var(--saturation-factor)), 60%, 0.55);
+
+  /* ── scrollbars ────────────────────────────────────────────────────── */
+  --scrollbar-thumb-bg:       hsla(34, calc(70% * var(--saturation-factor)), 55%, 0.24);
+  --scrollbar-thumb-bg-hover: hsla(38, calc(90% * var(--saturation-factor)), 60%, 0.42);
+  --scrollbar-track-bg:       transparent;
+
+  /* ── mentions → amber ──────────────────────────────────────────────── */
+  --message-mention-bg:     hsla(36, 96%, 55%, 0.13);
+  --message-mention-color:  hsl(40, 100%, 68%);
+  --markup-mention-fill:    hsla(36, 96%, 55%, 0.15);
+  --markup-mention-text:    hsl(40, 100%, 72%);
+  --markup-mention-border:  hsla(36, 96%, 55%, 0.38);
+
+  /* ── voice / composer control buttons ─────────────────────────────── */
+  --control-button-active-bg:  hsl(30, calc(40% * var(--saturation-factor)), 22%);
+  --control-button-hover-bg:   hsla(36, calc(90% * var(--saturation-factor)), 58%, 0.09);
+}
+
+/* warm ember edge-glow on the primary / brand buttons, Drake-HUD feel */
+.theme-dark button[class*="primary" i]:not([class*="secondary" i]):not(:disabled),
+.theme-dark button[class*="brand" i]:not(:disabled) {
+  box-shadow: 0 0 0 1px hsla(36, 95%, 55%, 0.28), 0 2px 16px hsla(28, 95%, 45%, 0.22);
+}

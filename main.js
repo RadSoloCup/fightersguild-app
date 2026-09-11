@@ -1726,27 +1726,34 @@ function injectFluxerInset() {
   `).then(k => { _fluxerInsetKey = k }).catch(() => {})
 }
 
-// ── RSI Blue theme — injected into Fluxer so it's the default look ────────────
-let _rsiThemeKey = null
-function rsiThemeEnabled() {
+// ── HUD skin — an RSI or Drake CSS skin injected over Fluxer's dark theme ─────
+// One of these is always on; there is no plain-dark option. (Separate from the
+// dark/light/system OS theme above, which uses config.theme.)
+const HUD_THEMES = {
+  rsi:   { label: 'RSI Blue', file: 'rsi-blue.css' },
+  drake: { label: 'Drake',    file: 'drake.css' },
+}
+let _hudThemeKey = null
+function currentHudTheme() {
   try {
     const cfg = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'config.json'), 'utf8'))
-    if (typeof cfg.rsiTheme === 'boolean') return cfg.rsiTheme
+    if (HUD_THEMES[cfg.hudTheme]) return cfg.hudTheme
   } catch {}
-  return true // default on
+  return 'rsi' // default
 }
-function injectRsiTheme() {
+function injectTheme() {
   if (!isWindowReady()) return
   const wc = mainWindow.webContents
-  if (_rsiThemeKey) { try { wc.removeInsertedCSS(_rsiThemeKey) } catch {} _rsiThemeKey = null }
-  if (!rsiThemeEnabled()) return
+  if (_hudThemeKey) { try { wc.removeInsertedCSS(_hudThemeKey) } catch {} _hudThemeKey = null }
+  const t = HUD_THEMES[currentHudTheme()] || HUD_THEMES.rsi
   let css
-  try { css = fs.readFileSync(path.join(__dirname, 'assets', 'rsi-blue.css'), 'utf8') } catch { return }
-  wc.insertCSS(css).then(key => { _rsiThemeKey = key }).catch(() => {})
+  try { css = fs.readFileSync(path.join(__dirname, 'assets', t.file), 'utf8') } catch { return }
+  wc.insertCSS(css).then(key => { _hudThemeKey = key }).catch(() => {})
 }
-function setRsiThemeEnabled(on) {
-  saveConfig({ rsiTheme: !!on })
-  injectRsiTheme()
+function setHudTheme(name) {
+  if (!HUD_THEMES[name]) return
+  saveConfig({ hudTheme: name })
+  injectTheme()
   rebuildTrayMenu()
 }
 
@@ -1943,7 +1950,7 @@ function configure(){if(window.electron&&window.electron.configureServer){clearI
     if (url.startsWith('data:') || url.startsWith('chrome')) return
     injectFluxerInset()
     injectVoiceDiag()
-    injectRsiTheme()
+    injectTheme()
   })
 
   // CSS drag-region fallback — ensures window is draggable on frameless platforms
@@ -1975,7 +1982,7 @@ function configure(){if(window.electron&&window.electron.configureServer){clearI
     `).catch(err => console.debug('[DragRegion] CSS injection failed:', err.message))
 
     injectFluxerInset()
-    injectRsiTheme()
+    injectTheme()
     injectVoiceDiag()
   })
 
@@ -2221,10 +2228,13 @@ function rebuildTrayMenu() {
       ],
     },
     {
-      label: 'RSI Blue theme',
-      type: 'checkbox',
-      checked: rsiThemeEnabled(),
-      click: m => setRsiThemeEnabled(m.checked),
+      label: 'HUD skin',
+      submenu: Object.entries(HUD_THEMES).map(([name, t]) => ({
+        label: t.label,
+        type: 'radio',
+        checked: currentHudTheme() === name,
+        click: () => setHudTheme(name),
+      })),
     },
     {
       label: 'Force direct voice connection',

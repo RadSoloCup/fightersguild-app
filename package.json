@@ -1,6 +1,6 @@
 {
   "name": "fighters-guild",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Fighters Guild Desktop, a native client for the Fighters Guild chat server",
   "main": "main.js",
   "scripts": {

@@ -33,7 +33,7 @@ This client is the desktop face of that stack.
 | Message length | set by the server admin | 2000 characters | 4000 characters |
 | Screen share quality | set by the server, LiveKit SFU | 720p at 30 fps | up to 1080p at 60 fps or 4K |
 | Voice bitrate | set by the server, no per server cap | lower on non boosted servers | higher, plus server boosts |
-| Custom client theme | ships with the RSI Blue theme, server can serve its own CSS | not without client mods that break the ToS | limited profile themes only |
+| Custom client theme | ships with RSI Blue and Drake HUD skins, server can serve its own CSS | not without client mods that break the ToS | limited profile themes only |
 | Bots and integrations | run your own, no approval gates | third party, subject to Discord review | same |
 | Ads and promotions | none | none today, but you do not control that | none |
 | Content scanning | none | yes | yes |
@@ -94,8 +94,10 @@ full feature set and how it plugs into the server.
 - **Pinned to the guild server.** No setup screen, it opens straight to the
   guild. A different server can still be set from the tray, under
   *Change Server URL*.
-- **RSI Blue theme by default.** A navy and cyan look that matches the Star
-  Citizen launcher, applied across Chat and Ops Center. Toggle it from the tray.
+- **HUD skins.** The chat is always skinned with one of two Star Citizen looks,
+  picked from the tray under *HUD skin*: **RSI Blue** (navy and cyan, the RSI
+  launcher) or **Drake** (near-black and marigold amber with hazard-red accents,
+  a Drake Interplanetary cockpit). RSI Blue is the default.
 - **System tray.** Minimise to tray. The icon turns green when your mic is live
   in a voice channel and red when you are muted.
 - **Global push to talk.** The PTT keybind works when the window is unfocused or
