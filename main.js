@@ -1771,14 +1771,28 @@ function currentHudTheme() {
   } catch {}
   return 'rsi' // default
 }
-function injectTheme() {
+function _applyHudCss() {
   if (!isWindowReady()) return
   const wc = mainWindow.webContents
+  const url = wc.getURL()
+  if (url.startsWith('data:') || url.startsWith('chrome')) return
   if (_hudThemeKey) { try { wc.removeInsertedCSS(_hudThemeKey) } catch {} _hudThemeKey = null }
   const t = HUD_THEMES[currentHudTheme()] || HUD_THEMES.rsi
   let css
   try { css = fs.readFileSync(path.join(__dirname, 'assets', t.file), 'utf8') } catch { return }
   wc.insertCSS(css).then(key => { _hudThemeKey = key }).catch(() => {})
+}
+let _hudReassertTimers = []
+// Fluxer is a single-page app: its own theme stylesheet can be injected by a
+// JS chunk that lands after our dom-ready/did-finish-load hooks, and since it
+// targets the same .theme-dark selector at equal specificity, whichever
+// stylesheet reaches <head> last wins the cascade, so a late Fluxer chunk can
+// silently overwrite our skin back to stock colours. Re-assert a few times to
+// win that race instead of only applying once.
+function injectTheme() {
+  for (const t of _hudReassertTimers) clearTimeout(t)
+  _hudReassertTimers = [500, 1500, 3500, 7000].map(delay => setTimeout(_applyHudCss, delay))
+  _applyHudCss()
 }
 function setHudTheme(name) {
   if (!HUD_THEMES[name]) return
