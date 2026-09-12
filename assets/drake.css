@@ -51,7 +51,7 @@
   --text-selection:    hsla(34, calc(96% * var(--saturation-factor)), 52%, 0.30);
   --text-on-brand-primary: hsl(28, 40%, 6%);
   --interactive-active:hsl(40, calc(100% * var(--saturation-factor)), 68%);
-  --interactive-muted: hsl(30, calc(12% * var(--saturation-factor)), 40%);
+  --interactive-muted: hsl(30, calc(12% * var(--saturation-factor)), 54%);
 
   /* ── brand + accents (Drake marigold amber) ────────────────────────── */
   --brand-primary:        hsl(34, calc(96% * var(--saturation-factor)), 52%);

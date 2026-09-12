@@ -51,7 +51,7 @@
   --text-selection:    hsla(192, calc(90% * var(--saturation-factor)), 60%, 0.28);
   --text-on-brand-primary: hsl(0, 0%, 100%);
   --interactive-active:hsl(190, calc(95% * var(--saturation-factor)), 78%);
-  --interactive-muted: hsl(210, calc(14% * var(--saturation-factor)), 42%);
+  --interactive-muted: hsl(210, calc(14% * var(--saturation-factor)), 56%);
 
   /* ── brand + accents (RSI blue / cyan) ──────────────────────────────── */
   --brand-primary:        hsl(202, calc(78% * var(--saturation-factor)), 47%);
