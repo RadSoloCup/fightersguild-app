@@ -541,6 +541,51 @@ function injectVoiceDiag() {
   })();`
   mainWindow.webContents.executeJavaScript(js).catch(() => {})
 }
+
+// Crosstalk (our Fluxer <-> Discord bridge) relays Discord chat through a
+// Fluxer webhook, which Fluxer's client always flags as a bot author, so it
+// shows the same "Bot" pill as a real bot account with no way to override it
+// per message. Crosstalk tags the display name with " [Discord]" (its
+// TAG_DISCORD env var) so real humans read as such; this hides the pill only
+// on names carrying that exact marker, leaving every other bot's pill alone.
+const RELAYED_NAME_MARKER = '[Discord]'
+function injectBotTagFilter() {
+  if (!isWindowReady()) return
+  const js = `(() => {
+    if (window.__fgBotTagFilterInstalled) return;
+    window.__fgBotTagFilterInstalled = true;
+    const MARKER = ${JSON.stringify(RELAYED_NAME_MARKER)};
+    const findPills = (root) => {
+      const pills = new Set();
+      const consider = el => {
+        if (el.matches?.('[data-flx="channel.user-tag.tag"]')) pills.add(el);
+        if (el.children.length === 0 && el.textContent.trim() === 'Bot' && el.parentElement) {
+          pills.add(el.parentElement);
+        }
+      };
+      if (root instanceof Element) consider(root);
+      root.querySelectorAll('[data-flx="channel.user-tag.tag"], span').forEach(consider);
+      return pills;
+    };
+    const maybeHide = (pill) => {
+      const row = pill.closest('h3') || pill.parentElement;
+      if (row && row.textContent && row.textContent.includes(MARKER)) {
+        pill.style.display = 'none';
+      }
+    };
+    findPills(document).forEach(maybeHide);
+    const obs = new MutationObserver(mutations => {
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (!(node instanceof HTMLElement)) continue;
+          findPills(node).forEach(maybeHide);
+        }
+      }
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+  })();`
+  mainWindow.webContents.executeJavaScript(js).catch(() => {})
+}
 async function exportVoiceLog() {
   const src = voiceLogPath()
   if (!fs.existsSync(src)) {
@@ -2023,6 +2068,7 @@ function configure(){if(window.electron&&window.electron.configureServer){clearI
     injectFluxerInset()
     injectVoiceDiag()
     injectTheme()
+    injectBotTagFilter()
   })
 
   // CSS drag-region fallback — ensures window is draggable on frameless platforms
@@ -2056,6 +2102,7 @@ function configure(){if(window.electron&&window.electron.configureServer){clearI
     injectFluxerInset()
     injectTheme()
     injectVoiceDiag()
+    injectBotTagFilter()
   })
 
   // Capture the voice-diagnostics lines emitted by injectVoiceDiag().
