@@ -95,6 +95,13 @@ let _pickingSoundInProgress = false // guard against concurrent file-picker dial
 let appUrl = APP_URL // Overridden at startup from saved config
 let configWindow = null
 
+// ── Spellcheck ─────────────────────────────────────────────────────────────
+// Set by the preload's DOM 'contextmenu' listener just before the native
+// 'context-menu' webContents event fires, so that handler knows whether the
+// click landed on a plain <textarea> (Fluxer's composer uses contenteditable
+// elsewhere, where Electron's own params.isEditable is more reliable).
+let _lastContextIsTextarea = false
+
 function loadServerUrl() {
   try {
     const cfgPath = path.join(app.getPath('userData'), 'config.json')
@@ -1149,14 +1156,40 @@ function registerIpcHandlers() {
   ipcMain.handle('notification-sound-get', () => _notifSoundPath ? path.basename(_notifSoundPath) : null)
   ipcMain.handle('notification-sound-preview', () => { playNotificationSound(); return true })
 
-  // ── Spellcheck stubs ────────────────────────────────────────────────────────
-  ipcMain.handle('spellcheck-get-state', () => ({ enabled: false, languages: [] }))
-  ipcMain.handle('spellcheck-set-state', () => ({ enabled: false, languages: [] }))
-  ipcMain.handle('spellcheck-get-available-languages', () => [])
-  ipcMain.handle('spellcheck-open-language-settings', () => false)
-  ipcMain.handle('spellcheck-replace-misspelling', () => {})
-  ipcMain.handle('spellcheck-add-word-to-dictionary', () => {})
-  ipcMain.on('spellcheck-context-target', () => {})
+  // ── Spellcheck ────────────────────────────────────────────────────────────
+  // Fluxer's own UI renders the suggestion menu (see preload's onTextareaContextMenu
+  // and the 'context-menu' handler in createWindow below); this just wires the
+  // window.electron.spellcheck* bridge to Chromium's real spellchecker instead
+  // of returning stub state, which is why suggestions never showed up before.
+  ipcMain.handle('spellcheck-get-state', event => {
+    const ses = event.sender.session
+    return { enabled: ses.isSpellCheckerEnabled(), languages: ses.getSpellCheckerLanguages() }
+  })
+  ipcMain.handle('spellcheck-set-state', (event, state) => {
+    const ses = event.sender.session
+    if (state && typeof state.enabled === 'boolean') ses.setSpellCheckerEnabled(state.enabled)
+    if (state && Array.isArray(state.languages) && state.languages.length) {
+      try { ses.setSpellCheckerLanguages(state.languages) } catch {}
+    }
+    const next = { enabled: ses.isSpellCheckerEnabled(), languages: ses.getSpellCheckerLanguages() }
+    try { event.sender.send('spellcheck-state-changed', next) } catch {}
+    return next
+  })
+  ipcMain.handle('spellcheck-get-available-languages', event => {
+    try { return event.sender.session.availableSpellCheckerLanguages } catch { return [] }
+  })
+  ipcMain.handle('spellcheck-open-language-settings', () => {
+    if (process.platform === 'win32') { shell.openExternal('ms-settings:regionlanguage'); return true }
+    if (process.platform === 'darwin') { shell.openExternal('x-apple.systempreferences:com.apple.preference.keyboard'); return true }
+    return false
+  })
+  ipcMain.handle('spellcheck-replace-misspelling', (event, word) => {
+    if (typeof word === 'string' && word) event.sender.replaceMisspelling(word)
+  })
+  ipcMain.handle('spellcheck-add-word-to-dictionary', (event, word) => {
+    if (typeof word === 'string' && word) { try { event.sender.session.addWordToSpellCheckerDictionary(word) } catch {} }
+  })
+  ipcMain.on('spellcheck-context-target', (_event, target) => { _lastContextIsTextarea = !!target?.isTextarea })
 
   // ── Passkey stubs ───────────────────────────────────────────────────────────
   ipcMain.handle('passkey-is-supported', () => false)
@@ -2046,6 +2079,23 @@ function configure(){if(window.electron&&window.electron.configureServer){clearI
   // preload (isolated world) forwards over IPC — survives console filtering.
   ipcMain.on('voice-log', (_e, line) => {
     if (typeof line === 'string') appendVoiceLog('[FG-VOICE] ' + line)
+  })
+
+  // Forward misspelling suggestions from Chromium's native context-menu event
+  // to Fluxer's own UI (window.electron.onTextareaContextMenu), which renders
+  // the themed suggestion menu itself. We never build a native Electron menu.
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    if (!params.misspelledWord && !(params.dictionarySuggestions && params.dictionarySuggestions.length)) return
+    try {
+      mainWindow.webContents.send('textarea-context-menu', {
+        misspelledWord: params.misspelledWord,
+        dictionarySuggestions: params.dictionarySuggestions,
+        isTextarea: _lastContextIsTextarea,
+        isEditable: params.isEditable,
+        x: params.x,
+        y: params.y,
+      })
+    } catch {}
   })
 
   // Clear registered keybinds and global shortcuts on navigation so stale binds
